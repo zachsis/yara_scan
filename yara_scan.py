@@ -4,13 +4,17 @@
 __author__ = "fdivrp"
 __version__ = "0.3"
 
-import os
-import sys
 import argparse
-import zipfile
-import yara
+import os
 import shutil
 import subprocess
+import zipfile
+import ConfigParser
+import yara
+
+
+p = ConfigParser.SafeConfigParser()
+p.read('{}/conf/yara.conf'.format(os.getcwd()))
 
 try:
     import magic
@@ -24,6 +28,7 @@ try:
     import rarfile
 except:
     print "Could not import rarfile for rar extraction. Use: pip install rarfile"
+
 
 def parse_arguments():
     """
@@ -43,10 +48,12 @@ def parse_arguments():
                         help='Path to the directory of files to scan (optional otherwise current dir is scanned)')
     return parser
 
+
 class YaraClass:
     """
     Main Yara Class that handles walking rule dir, compiling and testing rules, and walking and scanning files.
     """
+
     def __init__(self, arg_yara_dir, arg_scan_dir, arg_verbose):
         """
         YaraClass initialization that sets verbose, scan and yara directory
@@ -68,7 +75,7 @@ class YaraClass:
             for root, directories, files in os.walk(self.yara_dir):
                 for file in files:
                     if "yar" in os.path.splitext(file)[1]:
-                        rule_case = os.path.join(root,file) 
+                        rule_case = os.path.join(root, file)
                         if self.test_rule(rule_case):
                             all_rules[file] = rule_case
             self.rules = yara.compile(filepaths=all_rules)
@@ -94,7 +101,7 @@ class YaraClass:
         try:
             for root, directories, files in os.walk(self.scan_dir):
                 for file in files:
-                    work_file = os.path.join(root,file)
+                    work_file = os.path.join(root, file)
                     self.scan(work_file)
                     self.check_unpack(work_file)
         except Exception as e:
@@ -122,25 +129,25 @@ class YaraClass:
         if fc.pe:
             fc.pe_unpack()
         if (
-            fc.zip or
-            fc.doc or
-            fc.rar or
-            fc.pe
+                            fc.zip or
+                            fc.doc or
+                        fc.rar or
+                    fc.pe
         ):
             try:
                 for root, directories, files in os.walk(fc.tmp_dir):
                     for file in files:
-                        check_unpack_file = os.path.join(root,file)
+                        check_unpack_file = os.path.join(root, file)
                         self.scan(check_unpack_file)
                 fc.rm_tmp_dir()
             except Exception as e:
                 print "Check Unpack Loop Exception: {}".format(e)
 
-
     class FileClass:
         """
         Subclass that identifies file types and extracts archives and macros
         """
+
         def __init__(self, file):
             self.file = file
             self.tmp_dir = "{}_tmp".format(self.file)
@@ -160,21 +167,21 @@ class YaraClass:
         def check_magic(self):
             try:
                 file_type = magic.from_file(self.file)
-                #print file_type
+                print file_type
                 if (
-                    "Composite Document File" in file_type or
-                    "Word 2007+" in file_type or
-                    "Excel 2007+" in file_type or
-                    "PowerPoint 2007+" in file_type or
-                    "Rich Text Format data" in file_type
-                     ):
+                                            "Composite Document File" in file_type or
+                                            "Word 2007+" in file_type or
+                                        "Excel 2007+" in file_type or
+                                    "PowerPoint 2007+" in file_type or
+                                "Rich Text Format data" in file_type
+                ):
                     self.zip = True
                     self.doc = True
                 if (
-                    "Java" in file_type or
-                    "Macromedia Flash data" in file_type or
-                    "Zip" in file_type
-                    ):
+                                    "Java" in file_type or
+                                    "Macromedia Flash data" in file_type or
+                                "Zip" in file_type
+                ):
                     self.zip = True
                 if "RAR" in file_type:
                     self.rar = True
@@ -208,7 +215,7 @@ class YaraClass:
                             macro_file.write(vba_code)
             except Exception as e:
                 print "get_macro Exception: {}".format(e)
-        
+
         def unrar_file(self):
             """
             Unrar files into tmp directory
@@ -220,7 +227,7 @@ class YaraClass:
                 rf.extractall(self.tmp_dir)
             except Exception as e:
                 print "unrar Exception: {}".format(e)
-        
+
         def pe_unpack(self):
             """
             PE Unpacking actions
@@ -228,17 +235,22 @@ class YaraClass:
             try:
                 self.mk_tmp_dir()
                 print "Unpacking PE from {}".format(self.file)
-                subprocess.call(["upx", "-d", "{}".format(self.file), "-o", "{}{}upx_unpacked".format(self.tmp_dir, os.sep)], stderr=subprocess.STDOUT)
+                subprocess.call(
+                    ["upx", "-d", "{}".format(self.file), "-o", "{}{}upx_unpacked".format(self.tmp_dir, os.sep)],
+                    stderr=subprocess.STDOUT)
             except Exception as e:
                 print "PE Unpacking Exception {}".format(e)
 
-def main():
-    args = parse_arguments().parse_args()
 
-    ys = YaraClass(args.yara_dir, args.scan_dir, args.verbose)
+def main():
+    # args = parse_arguments().parse_args()
+
+    ys = YaraClass(arg_yara_dir=p.get('general', 'yararulesdir'),
+                   arg_scan_dir=p.get('general', 'scandir'),
+                   arg_verbose=bool(p.get('general', 'verbose_output')))
     ys.compile()
     ys.scan_all()
-    
+
 
 if __name__ == "__main__":
     main()
